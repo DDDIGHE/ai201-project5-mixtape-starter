@@ -52,3 +52,21 @@ The search query joined a one-to-many association without requesting unique song
 ### Fix and Side-Effect Check
 
 I added `DISTINCT` before materializing the query. I checked searches for songs with zero, one, and multiple tags, plus a query with no match.
+
+## Issue 5: Last Playlist Song Is Missing
+
+### How I Reproduced It
+
+I ran the playlist tests with a five-song playlist. `get_playlist_songs()` returned only four songs, and the ordered titles stopped at `Track 4` instead of including `Track 5`.
+
+### How I Found the Root Cause
+
+I followed `GET /playlists/<playlist_id>/songs` in `routes/playlists.py` to `get_playlist_songs()` in `services/playlist_service.py`. The database query returned the songs in the correct position order, but the return expression sliced the result before serialization.
+
+### Root Cause
+
+The expression `songs[:-1]` always removed the final query result. This also made a one-song playlist appear empty.
+
+### Fix and Side-Effect Check
+
+I serialized the complete `songs` list. I checked the five-song count, position order, and empty-playlist behavior.
