@@ -34,3 +34,21 @@ I followed the listen route in `routes/songs.py` to `record_listening_event()` a
 ### Fix and Side-Effect Check
 
 I removed the weekday condition so every one-day gap increments the streak. I checked new-user, same-day, ordinary consecutive-day, skipped-day, and Saturday-to-Sunday behavior.
+
+## Issue 3: Duplicate Songs in Search Results
+
+### How I Reproduced It
+
+The seed data gives `Crown Heights Anthem` three tags. Running the search query's outer join for that title produced three database rows with the same song ID. SQLAlchemy 2.0.51 collapsed those rows when returning full `Song` entities, so the provided API-level test happened to pass in this environment; the underlying query still produced the duplicate rows reported by the issue.
+
+### How I Found the Root Cause
+
+I followed `GET /songs/search` in `routes/songs.py` to `search_songs()` in `services/search_service.py`. The query outer-joined `song_tags`, so a song produced one result row per matching tag association before ORM materialization.
+
+### Root Cause
+
+The search query joined a one-to-many association without requesting unique songs. Songs with multiple tags therefore appeared multiple times at the SQL row level, and the result depended on ORM entity deduplication rather than the query's contract.
+
+### Fix and Side-Effect Check
+
+I added `DISTINCT` before materializing the query. I checked searches for songs with zero, one, and multiple tags, plus a query with no match.
