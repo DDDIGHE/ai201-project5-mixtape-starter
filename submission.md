@@ -2,7 +2,7 @@
 
 ## AI Usage
 
-I used Codex to summarize call chains, compare service contracts with tests, and suggest candidate root causes. I verified each suggestion against the source code and remote test output before changing code. For Issue 3, the initial expectation was that the provided test would fail, but SQLAlchemy 2.0.51 deduplicated ORM entities; I then verified that the underlying join still produced duplicate rows before applying `DISTINCT`.
+I used Codex to trace service calls and review fixes. I verified its suggestions with the code and remote tests. For Issue 3, I rejected its first assumption and checked the duplicate rows directly.
 
 ## Codebase Map
 
@@ -39,19 +39,19 @@ I removed the weekday condition so every one-day gap increments the streak. I ch
 
 ### How I Reproduced It
 
-The seed data gives `Crown Heights Anthem` three tags. Running the search query's outer join for that title produced three database rows with the same song ID. SQLAlchemy 2.0.51 collapsed those rows when returning full `Song` entities, so the provided API-level test happened to pass in this environment; the underlying query still produced the duplicate rows reported by the issue.
+`Crown Heights Anthem` has three tags, and the join returned its song ID three times. SQLAlchemy returned one `Song` object, so the supplied test passed.
 
 ### How I Found the Root Cause
 
-I followed `GET /songs/search` in `routes/songs.py` to `search_songs()` in `services/search_service.py`. The query outer-joined `song_tags`, so a song produced one result row per matching tag association before ORM materialization.
+`GET /songs/search` calls `search_songs()`. Its tag join returned one row per tag.
 
 ### Root Cause
 
-The search query joined a one-to-many association without requesting unique songs. Songs with multiple tags therefore appeared multiple times at the SQL row level, and the result depended on ORM entity deduplication rather than the query's contract.
+The query did not request unique songs after joining `song_tags`.
 
 ### Fix and Side-Effect Check
 
-I added `DISTINCT` before materializing the query. I checked searches for songs with zero, one, and multiple tags, plus a query with no match.
+I added `DISTINCT` and checked songs with zero, one, and multiple tags, plus a search with no match.
 
 ## Issue 5: Last Playlist Song Is Missing
 
